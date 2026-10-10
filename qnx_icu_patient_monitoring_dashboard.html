@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QNX ICU Real-Time Telemetry & Alarm Engine</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font & FontAwesome Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.98); }
+        }
+        .animate-pulse-soft {
+            animation: pulse-soft 2s infinite ease-in-out;
+        }
+        .led-indicator {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px rgba(0,0,0,0.15);
+        }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 12px rgba(239, 68, 68, 0.7); }
+        .led-blue { background-color: #3b82f6; box-shadow: 0 0 12px rgba(59, 130, 246, 0.7); }
+        .led-yellow { background-color: #eab308; box-shadow: 0 0 12px rgba(234, 179, 8, 0.7); }
+        .led-green { background-color: #22c55e; box-shadow: 0 0 12px rgba(34, 197, 94, 0.7); }
+        .led-white { background-color: #f8fafc; border: 2px solid #cbd5e1; box-shadow: 0 0 12px rgba(255, 255, 255, 0.9); }
+        
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased h-full flex flex-col">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="bg-indigo-600 text-white p-3 rounded-xl shadow-md flex items-center justify-center">
+                    <i class="fa-solid fa-heart-pulse text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 tracking-tight">QNX-ICU Real-Time Telemetry & Alarm Engine</h1>
+                    <div class="flex items-center space-x-2 mt-0.5">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                            <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Simulation Active (VMware / QNX Mode)
+                        </span>
+                        <span class="text-xs text-slate-500 hidden sm:inline">| POSIX Real-Time FIFO & Priority Queue Active</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <button onclick="triggerEmergencySimulation()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-sm transition transform active:scale-95 flex items-center space-x-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Trigger Code Blue Event</span>
+                </button>
+                <div class="hidden lg:flex flex-col text-right border-l border-slate-200 pl-4">
+                    <span class="text-xs text-slate-400 font-medium uppercase">System Clock</span>
+                    <span id="live-clock" class="text-sm font-bold text-slate-700 font-mono">00:00:00.000</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Patients Monitored</p>
+                    <h3 id="stat-patients" class="text-2xl font-bold text-slate-900 mt-1">10</h3>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-bed-pulse"></i>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Alarms</p>
+                    <h3 id="stat-alarms" class="text-2xl font-bold text-rose-600 mt-1">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ambulance Escalations</p>
+                    <h3 id="stat-ambulance" class="text-2xl font-bold text-amber-600 mt-1">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-truck-medical"></i>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Duplicate Filter Rate</p>
+                    <h3 id="stat-filter-rate" class="text-2xl font-bold text-emerald-600 mt-1">0.0%</h3>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
+                    <i class="fa-solid fa-filter"></i>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 my-6 flex-1 flex flex-col lg:flex-row gap-6">
+        
+        <!-- Left Column: Patient Grid & Filters -->
+        <div class="flex-1 flex flex-col space-y-4">
+            <!-- Filter & Search Controls -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
+                <div class="relative w-full sm:w-72">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input type="text" id="search-input" oninput="filterPatients()" placeholder="Search Patient ID or Doctor..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+                </div>
+
+                <div class="flex items-center space-x-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                    <button onclick="setSeverityFilter('ALL')" id="filter-btn-ALL" class="filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 text-white whitespace-nowrap transition">All</button>
+                    <button onclick="setSeverityFilter('CRITICAL')" id="filter-btn-CRITICAL" class="filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap transition">Critical</button>
+                    <button onclick="setSeverityFilter('SEVERE')" id="filter-btn-SEVERE" class="filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap transition">Severe</button>
+                    <button onclick="setSeverityFilter('WARNING')" id="filter-btn-WARNING" class="filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap transition">Warning</button>
+                    <button onclick="setSeverityFilter('NORMAL')" id="filter-btn-NORMAL" class="filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap transition">Normal</button>
+                </div>
+            </div>
+
+            <!-- Patient Cards Grid -->
+            <div id="patient-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Dynamically populated patient cards -->
+            </div>
+        </div>
+
+        <!-- Right Column: Real-Time Telemetry Event Log Feed -->
+        <div class="w-full lg:w-96 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col h-[640px] lg:h-auto">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                    <h2 class="font-bold text-slate-900 text-sm">QNX Telemetry & Alarm Feed</h2>
+                </div>
+                <button onclick="clearConsoleLog()" class="text-xs text-slate-400 hover:text-slate-600 font-medium">Clear Log</button>
+            </div>
+            
+            <div id="telemetry-log" class="p-4 flex-1 overflow-y-auto space-y-3 font-mono text-xs bg-slate-900 text-slate-200 rounded-b-2xl">
+                <div class="text-slate-500 italic">[SYSTEM] Initializing QNX FIFO input queues and priority scheduling threads...</div>
+                <div class="text-emerald-400">[KERNEL] GPIO hardware mapping simulated successfully.</div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Patient Database with Doctors and Vitals
+        const doctorNames = [
+            "Dr. Sarah Jenkins, MD", "Dr. Robert Chen, FACC", "Dr. Emily Thorne, PICU",
+            "Dr. Marcus Vance, Trauma", "Dr. Elena Rostova, ICU Dir", "Dr. David Kim, Intensivist"
+        ];
+
+        const ageGroups = ["Neonate", "Child", "Adult", "Older Adult"];
+
+        let patients = Array.from({ length: 10 }, (_, i) => {
+            const id = i + 1;
+            return {
+                id: id,
+                ageGroup: ageGroups[i % 4],
+                doctor: doctorNames[i % doctorNames.length],
+                isPostOp: (i % 2 === 0),
+                heartRate: 75 + Math.floor(Math.random() * 25),
+                spo2: 96 + Math.floor(Math.random() * 4),
+                respRate: 16 + Math.floor(Math.random() * 6),
+                sysBp: 120 + Math.floor(Math.random() * 15),
+                severity: "NORMAL",
+                alarmDesc: "Vitals Stable",
+                transferReq: false,
+                priorityScore: 0,
+                queueWait: 12,
+                latency: 18,
+                duplicateCount: 0,
+                ledColor: "green",
+                ledLabel: "GREEN LED - NORMAL"
+            };
+        });
+
+        let currentFilter = "ALL";
+        let searchQuery = "";
+        let totalRawAlarms = 0;
+        let totalDispatchedAlarms = 0;
+        let ambulanceCount = 0;
+
+        // Update live clock
+        setInterval(() => {
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+            document.getElementById('live-clock').innerText = timeString;
+        }, 50);
+
+        // Simulation loop mimicking C backend
+        setInterval(() => {
+            simulateTelemetryTick();
+        }, 1500);
+
+        function simulateTelemetryTick() {
+            // Pick a random patient to experience a vital fluctuation
+            const targetIdx = Math.floor(Math.random() * patients.length);
+            const p = patients[targetIdx];
+
+            totalRawAlarms++;
+
+            // Random event generation
+            const eventChance = Math.random();
+            if (eventChance < 0.45) {
+                // Normal
+                p.heartRate = 65 + Math.floor(Math.random() * 25);
+                p.spo2 = 96 + Math.floor(Math.random() * 4);
+                p.severity = "NORMAL";
+                p.alarmDesc = "Vitals Stable";
+                p.transferReq = false;
+                p.ledColor = "green";
+                p.ledLabel = "GREEN LED - NORMAL";
+                p.priorityScore = 5;
+            } else if (eventChance < 0.70) {
+                // Warning
+                p.heartRate = 105 + Math.floor(Math.random() * 15);
+                p.spo2 = 93 + Math.floor(Math.random() * 2);
+                p.severity = "WARNING";
+                p.alarmDesc = "HR Outside Range / Mild SpO2 Drop";
+                p.transferReq = false;
+                p.ledColor = "yellow";
+                p.ledLabel = "YELLOW LED - WARNING";
+                p.priorityScore = 35;
+            } else if (eventChance < 0.90) {
+                // Severe / Risk
+                p.heartRate = 125 + Math.floor(Math.random() * 20);
+                p.spo2 = 89 + Math.floor(Math.random() * 3);
+                p.severity = "SEVERE";
+                p.alarmDesc = "Severe Low SpO2";
+                p.transferReq = false;
+                p.ledColor = "blue";
+                p.ledLabel = "BLUE LED - RISK/SEVERE";
+                p.priorityScore = 65;
+            } else {
+                // Critical
+                p.heartRate = 150 + Math.floor(Math.random() * 30);
+                p.spo2 = 82 + Math.floor(Math.random() * 6);
+                p.severity = "CRITICAL";
+                p.alarmDesc = (p.ageGroup === "Neonate" || p.ageGroup === "Child") ? "CRITICAL (Pediatric ECMO Transfer Req)" : "CRITICAL Hypoxia / Arrhythmia";
+                
+                if (p.ageGroup === "Neonate" || p.ageGroup === "Child") {
+                    p.transferReq = true;
+                    p.ledColor = "white";
+                    p.ledLabel = "WHITE LED - TRANSFER / AMBULANCE REQ";
+                    ambulanceCount++;
+                } else {
+                    p.transferReq = false;
+                    p.ledColor = "red";
+                    p.ledLabel = "RED LED - CRITICAL LOCAL";
+                }
+                p.priorityScore = 110;
+            }
+
+            p.queueWait = 10 + Math.floor(Math.random() * 25);
+            p.latency = 14 + Math.floor(Math.random() * 12);
+            totalDispatchedAlarms++;
+
+            logTelemetryEvent(p);
+            renderDashboard();
+        }
+
+        function triggerEmergencySimulation() {
+            const p = patients[Math.floor(Math.random() * patients.length)];
+            p.heartRate = 180;
+            p.spo2 = 79;
+            p.severity = "CRITICAL";
+            p.transferReq = true;
+            p.alarmDesc = "CODE BLUE: Severe Acute Respiratory Distress";
+            p.ledColor = "white";
+            p.ledLabel = "WHITE LED - CODE BLUE / AMBULANCE REQ";
+            p.priorityScore = 150;
+            ambulanceCount++;
+            totalRawAlarms += 3;
+            totalDispatchedAlarms += 2;
+
+            logTelemetryEvent(p, true);
+            renderDashboard();
+        }
+
+        function logTelemetryEvent(p, isEmergency = false) {
+            const feed = document.getElementById('telemetry-log');
+            const timeStr = new Date().toLocaleTimeString() + '.' + String(new Date().getMilliseconds()).padStart(3, '0');
+            
+            let colorClass = "text-emerald-400";
+            if (p.severity === "CRITICAL") colorClass = p.transferReq ? "text-slate-100 font-bold" : "text-rose-400 font-bold";
+            else if (p.severity === "SEVERE") colorClass = "text-blue-400";
+            else if (p.severity === "WARNING") colorClass = "text-amber-300";
+
+            const div = document.createElement('div');
+            div.className = `p-2 rounded bg-slate-800/80 border-l-2 ${p.severity === 'CRITICAL' ? 'border-rose-500' : 'border-indigo-500'} text-xs`;
+            
+            let html = `<span class="text-slate-400">[${timeStr}]</span> <span class="text-indigo-300">P${String(p.id).padStart(2,'0')}</span> | <span class="${colorClass}">${p.alarmDesc}</span> | HR: ${p.heartRate} | SpO2: ${p.spo2}% | Score: ${p.priorityScore}`;
+            if (p.transferReq) {
+                html += `<br><span class="text-amber-400">└─> [FACILITY ALERT]: Specialized Treatment Unavailable! Ambulance Requested via UART.</span>`;
+            }
+            div.innerHTML = html;
+            
+            feed.prepend(div);
+            if (feed.children.length > 50) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+
+        function setSeverityFilter(severity) {
+            currentFilter = severity;
+            document.querySelectorAll('.filter-tab').forEach(btn => {
+                btn.className = "filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap transition";
+            });
+            document.getElementById(`filter-btn-${severity}`).className = "filter-tab px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-600 text-white whitespace-nowrap transition";
+            renderDashboard();
+        }
+
+        function filterPatients() {
+            searchQuery = document.getElementById('search-input').value.toLowerCase();
+            renderDashboard();
+        }
+
+        function clearConsoleLog() {
+            document.getElementById('telemetry-log').innerHTML = '<div class="text-slate-500 italic">[SYSTEM] Log cleared by operator.</div>';
+        }
+
+        function renderDashboard() {
+            // Update stats
+            let activeAlarmsCount = patients.filter(p => p.severity === "CRITICAL" || p.severity === "SEVERE").length;
+            document.getElementById('stat-patients').innerText = patients.length;
+            document.getElementById('stat-alarms').innerText = activeAlarmsCount;
+            document.getElementById('stat-ambulance').innerText = ambulanceCount;
+            
+            const filterRate = totalRawAlarms > 0 ? (((totalRawAlarms - totalDispatchedAlarms) / totalRawAlarms) * 100).toFixed(1) : "0.0";
+            document.getElementById('stat-filter-rate').innerText = filterRate + "%";
+
+            const grid = document.getElementById('patient-grid');
+            grid.innerHTML = "";
+
+            const filtered = patients.filter(p => {
+                const matchesSearch = String(p.id).includes(searchQuery) || p.doctor.toLowerCase().includes(searchQuery);
+                if (!matchesSearch) return false;
+                if (currentFilter === "ALL") return true;
+                if (currentFilter === "CRITICAL") return p.severity === "CRITICAL";
+                if (currentFilter === "SEVERE") return p.severity === "SEVERE";
+                if (currentFilter === "WARNING") return p.severity === "WARNING";
+                if (currentFilter === "NORMAL") return p.severity === "NORMAL";
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-full bg-white p-8 rounded-2xl text-center text-slate-400 border border-slate-200">No patients match the current filter or search criteria.</div>`;
+                return;
+            }
+
+            filtered.forEach(p => {
+                let badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                if (p.severity === "CRITICAL") badgeClass = p.transferReq ? "bg-slate-800 text-white border-slate-700 animate-pulse" : "bg-rose-50 text-rose-700 border-rose-200 animate-pulse";
+                else if (p.severity === "SEVERE") badgeClass = "bg-blue-50 text-blue-700 border-blue-200";
+                else if (p.severity === "WARNING") badgeClass = "bg-amber-50 text-amber-700 border-amber-200";
+
+                const card = document.createElement('div');
+                card.className = `bg-white rounded-2xl border ${p.severity === 'CRITICAL' ? 'border-rose-300 ring-2 ring-rose-100' : 'border-slate-200'} p-5 shadow-xs flex flex-col justify-between transition hover:shadow-md`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 font-bold flex items-center justify-center">
+                                    P${String(p.id).padStart(2, '0')}
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-slate-900">Patient #${p.id}</h4>
+                                    <p class="text-xs text-slate-500">${p.ageGroup} ${p.isPostOp ? '• Post-Op' : ''}</p>
+                                </div>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-full text-xs font-semibold border ${badgeClass}">
+                                ${p.severity}
+                            </span>
+                        </div>
+
+                        <div class="mt-3 text-xs text-slate-600 flex items-center justify-between">
+                            <span><i class="fa-solid fa-user-doctor text-indigo-500 mr-1.5"></i> ${p.doctor}</span>
+                            <span class="flex items-center"><span class="led-indicator led-${p.ledColor} mr-1.5"></span> ${p.ledLabel}</span>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-2 mt-4 bg-slate-50 p-3 rounded-xl text-center">
+                            <div>
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">Heart Rate</span>
+                                <span class="text-sm font-bold ${p.heartRate > 130 ? 'text-rose-600' : 'text-slate-800'}">${p.heartRate} <span class="text-[10px] font-normal text-slate-500">bpm</span></span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">SpO2</span>
+                                <span class="text-sm font-bold ${p.spo2 <= 90 ? 'text-rose-600' : 'text-slate-800'}">${p.spo2}<span class="text-[10px] font-normal text-slate-500">%</span></span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">Resp Rate</span>
+                                <span class="text-sm font-bold text-slate-800">${p.respRate} <span class="text-[10px] font-normal text-slate-500">rpm</span></span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">Sys BP</span>
+                                <span class="text-sm font-bold text-slate-800">${p.sysBp}</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 text-xs flex items-center justify-between text-slate-500 px-1">
+                            <span>Alarm: <strong class="text-slate-700">${p.alarmDesc}</strong></span>
+                            <span>Score: <strong class="text-indigo-600">${p.priorityScore}</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span class="text-slate-400">Queue Wait: ${p.queueWait}ms | Latency: ${p.latency}ms</span>
+                        <button onclick="acknowledgeAlarm(${p.id})" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg transition">
+                            Acknowledge
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function acknowledgeAlarm(id) {
+            const p = patients.find(pt => pt.id === id);
+            if (p) {
+                p.severity = "NORMAL";
+                p.alarmDesc = "Acknowledged & Stabilized";
+                p.ledColor = "green";
+                p.ledLabel = "GREEN LED - NORMAL";
+                p.priorityScore = 0;
+                renderDashboard();
+
+                const feed = document.getElementById('telemetry-log');
+                const div = document.createElement('div');
+                div.className = "p-2 rounded bg-emerald-950/60 border-l-2 border-emerald-500 text-xs text-emerald-300 font-mono";
+                div.innerText = `[OPERATOR ACK] Patient #${id} alarm acknowledged by medical staff. Hardware LED reset to GREEN.`;
+                feed.prepend(div);
+            }
+        }
+
+        // Initial render on load
+        window.onload = function() {
+            renderDashboard();
+        };
+    </script>
+</body>
+</html>
