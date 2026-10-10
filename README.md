@@ -8,8 +8,6 @@ The QNX ICU Alarm Prioritizer simulates multiple patients generating vital-sign 
 
 The project also includes a web dashboard interface for displaying patient-monitoring information.
 
-**Note:** The C source and HTML dashboard must have an implemented communication mechanism to operate as one live system. A local HTML file path alone does not connect the C application to the dashboard.
-
 ## Features
 
 - Simulates vital-sign data for 10 patients.
@@ -37,9 +35,9 @@ The `assets` folder should contain the CSS, JavaScript, images, and other files 
 
 - C
 - POSIX Threads (pthreads)
-- QNX Neutrino RTOS / QNX Momentics IDE
+- QNX Momentics IDE
 - HTML, CSS, and JavaScript
-- Raspberry Pi 4 GPIO support (for compatible hardware)
+- Raspberry Pi 4 GPIO support
 
 ## Setup and Execution
 
