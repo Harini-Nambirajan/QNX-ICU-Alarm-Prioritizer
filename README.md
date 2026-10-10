@@ -28,9 +28,7 @@ The project also includes a web dashboard interface for displaying patient-monit
 QNX-ICU-Alarm-Prioritizer/
 ├── ICU_Alarm_Prioritizer.c
 ├── qnx_icu_patient_monitoring_dashboard.html
-├── assets/
 ├── README.md
-└── .gitignore
 ```
 
 The `assets` folder should contain the CSS, JavaScript, images, and other files required by the dashboard.
@@ -69,7 +67,3 @@ Alarm thresholds, scheduling behavior, transfer logic, and hardware support requ
 - Add real sensor input and validated data handling.
 - Improve event logging and performance reporting.
 - Test scheduling and timing behavior on the target QNX hardware.
-
-## License
-
-Add an appropriate license before permitting reuse of this project.
